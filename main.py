@@ -57,6 +57,7 @@ def initialize() -> tuple[str, str, str, int]:
         config_manager.set_value("password", password)
         config_manager.set_value("target_device_model", target_device_model)
         config_manager.set_value("poll_interval_seconds", 180)
+        config_manager.set_value("initialized", True)
         config_manager.save_config()
 
         return apple_id, password, target_device_model, 180

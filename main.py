@@ -347,4 +347,5 @@ def main():
 
 
 if __name__ == "__main__":
+    build_manager.generate_build_version()
     main()

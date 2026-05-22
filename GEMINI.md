@@ -59,3 +59,8 @@ Logging is handled by `redu-logger`, which supports both local file logging and 
 
 ### Polling Interval
 The default polling interval is 180 seconds (3 minutes) to avoid being rate-limited by Apple's servers. This can be adjusted in the `config.yaml` after the initial setup.
+
+## Security & Maintenance
+Detailed security analysis and privacy risks are documented in [GEMINI_ANALYSIS.md](./GEMINI_ANALYSIS.md).
+
+Outstanding tasks, including security remediations and feature improvements, are tracked in [TODO.md](./TODO.md).

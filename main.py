@@ -146,8 +146,6 @@ def initialize_neonize():
         sys.stdin.readline()
         client = NewClient(str(NEONIZE_SESSION_FILE_PATH))
         client.connect()
-        time.sleep(3)
-        client.disconnect()
         return client
 
 def initialize_discord_webhook():

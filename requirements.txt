@@ -1,0 +1,12 @@
+--find-links https://python.ridwanabid.com/repository/simple/redu-logger
+--find-links https://python.ridwanabid.com/repository/simple/redu-config-manager
+--find-links https://python.ridwanabid.com/repository/simple/redu-build-manager
+
+neonize~=0.3.14.post0
+protobuf~=7.35.0
+redu_logger~=1.0.5
+redu_config_manager~=1.0.0
+redu_build_manager~=1.0.1
+requests~=2.34.2
+pyicloud~=2.5.0
+readchar~=4.2.2

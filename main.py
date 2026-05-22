@@ -13,7 +13,6 @@ from pyicloud import PyiCloudService
 from pyicloud.exceptions import PyiCloudFailedLoginException, PyiCloudAPIResponseException
 from neonize.client import NewClient
 from neonize.utils import build_jid
-from readchar import readkey
 
 __version__ = "0.0.2"
 
@@ -143,8 +142,8 @@ def initialize_neonize():
         return client
     else:
         logger.info("Neonize Session file doesn't exist. Creating...")
-        print("Please scan the QR code to login to you WhatsApp account. Press any key to continue...")
-        readkey()
+        print("Please scan the QR code to login to you WhatsApp account. Press enter to continue...")
+        sys.stdin.readline()
         client = NewClient(str(NEONIZE_SESSION_FILE_PATH))
         return client
 

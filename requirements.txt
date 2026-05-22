@@ -9,4 +9,3 @@ redu_config_manager~=1.0.0
 redu_build_manager~=1.0.1
 requests~=2.34.2
 pyicloud~=2.5.0
-readchar~=4.2.2

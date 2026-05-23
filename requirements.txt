@@ -8,4 +8,4 @@ redu_logger~=1.0.5
 redu_config_manager~=1.0.0
 redu_build_manager~=1.0.1
 requests~=2.34.2
-pyicloud~=2.5.0
+pyicloud~=2.6.0

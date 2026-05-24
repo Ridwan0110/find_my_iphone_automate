@@ -64,8 +64,8 @@ class WhatsAppClient:
             self._qr_showed = True
             self.client.event._Event__onqr(client, qr_bytes)
 
-        self.client.event(ConnectedEv)(self.on_connected)
-        self.client.event(DisconnectedEv)(self.on_disconnect)
+        self.client.event(ConnectedEv)(self._on_connected)
+        self.client.event(DisconnectedEv)(self._on_disconnect)
         logger.info("Initialized WhatsAppClient")
 
     def _update_connection_flags(self, connected: bool, is_connecting: bool):
@@ -82,15 +82,15 @@ class WhatsAppClient:
             with self._lock:
                 self._update_connection_flags(False, False)
 
-    @property
-    def connected(self) -> bool:
+    def _on_connected(self, cl, event):
+        logger.info(f"[{self.class_name}] Connected", True)
         with self._lock:
-            return self._connected
+            self._update_connection_flags(True, False)
 
-    @property
-    def qr_showed(self) -> bool:
+    def _on_disconnect(self, cl, event):
+        logger.info(f"[{self.class_name}] Disconnected")
         with self._lock:
-            return self._qr_showed
+            self._update_connection_flags(False, False)
 
     def _auto_connect(self, timeout: int, retry_count: int) -> bool:
         logger.info(f"[{self.class_name}] Auto-connecting...", True)
@@ -124,6 +124,16 @@ class WhatsAppClient:
             return False
         return True
 
+    @property
+    def connected(self) -> bool:
+        with self._lock:
+            return self._connected
+
+    @property
+    def qr_showed(self) -> bool:
+        with self._lock:
+            return self._qr_showed
+
     def connect(self):
         with self._lock:
             if self._connected or self._is_connecting:
@@ -145,16 +155,6 @@ class WhatsAppClient:
 
         if self.whatsapp_thread and self.whatsapp_thread.is_alive():
             self.whatsapp_thread.join(timeout=timeout)
-
-    def on_connected(self, cl, event):
-        logger.info(f"[{self.class_name}] Connected", True)
-        with self._lock:
-            self._update_connection_flags(True, False)
-
-    def on_disconnect(self, cl, event):
-        logger.info(f"[{self.class_name}] Disconnected")
-        with self._lock:
-            self._update_connection_flags(False, False)
 
     def send_message(self, recipient: str, message: str, timeout: int = 30, retry_count: int = 1) -> bool:
         """
@@ -291,19 +291,8 @@ def initialize_neonize() -> WhatsAppClient:
         while not whatsapp_client.connected:
             whatsapp_client.connect()
             time.sleep(5)
-            print("Press enter if you're done...")
-            sys.stdin.readline()
 
-            if whatsapp_client.qr_showed:
-                logger.warning("WhatsApp is not connected. Do you want to try again?", True)
-                choice = input("(y/n): ").strip().lower()
-                if choice in ("y", "yes"):
-                    continue
-                else:
-                    break
-            else:
-                logger.error("Unknown error occurred. WhatsApp alert will be disabled", True)
-                whatsapp_client.quit()
+        whatsapp_client.disconnect()
         return whatsapp_client
 
     return whatsapp_client
@@ -434,13 +423,9 @@ def trigger_alert(device_name, device_model, location_data, discord_webhook, wha
 
                 if not whatsapp_client.connected:
                     logger.warning(f"WhatsApp client not connected yet. Attempting to send anyway...", True)
-
-                # Ensure recipient is a JID
-                recipient_jid = build_jid(recipient)
                 
                 # Send the message
-                whatsapp_client.send_message(recipient_jid, message)
-                logger.info(f"WhatsApp message delivered to {recipient}.", True)
+                whatsapp_client.send_message(recipient, message)
             except Exception as e:
                 logger.error(f"Failed to send WhatsApp message to {recipient}: {e}", True)
 

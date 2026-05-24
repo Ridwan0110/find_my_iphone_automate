@@ -16,7 +16,7 @@ from neonize.client import NewClient
 from neonize.events import ConnectedEv, DisconnectedEv
 from neonize.utils import build_jid
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 # Initialize PathLIB Paths
 BASE_DIR = Path(__file__).resolve().parent

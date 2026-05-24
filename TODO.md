@@ -2,7 +2,7 @@
 
 ## Security & Maintenance
 - [ ] Remove commented-out credentials from `main.py`.
-- [ ] Implement `python-dotenv` for `apple_id` and `password` storage.
+- [x] Implement `neonize` in a separate thread/daemon (In Progress)
 - [ ] Add `data/` and `.env` to `.gitignore`.
 - [ ] Review the destination and security of the `RemoteLogger`.
 - [x] Scrub git history of all previous secrets. (Completed via repository re-init)

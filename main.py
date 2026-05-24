@@ -7,11 +7,13 @@ import time
 import json
 import redu_logger, redu_config_manager, redu_build_manager
 import requests
+import threading
 from pathlib import Path
 from datetime import datetime
 from pyicloud import PyiCloudService
 from pyicloud.exceptions import PyiCloudFailedLoginException, PyiCloudAPIResponseException
 from neonize.client import NewClient
+from neonize.events import ConnectedEv, DisconnectedEv
 from neonize.utils import build_jid
 
 __version__ = "0.0.2"
@@ -42,6 +44,148 @@ config_manager = redu_config_manager.ConfigManager(CONFIG_FILE_PATH)
 enable_build_manager = True  # False on release
 build_manager = redu_build_manager.BuildManager(enable_build=enable_build_manager, build_file=BUILD_FILE_PATH, )
 
+
+class WhatsAppClient:
+    def __init__(self, session_path: Path):
+        logger.info("Initializing WhatsAppClient...")
+        self.session_path = session_path
+
+        self.class_name = "WhatsAppClient"
+        self.client = NewClient(str(session_path))
+        self._lock = threading.Lock()
+        self._is_connecting = False
+        self._connected = False
+        self._qr_showed = False
+        self.whatsapp_thread = None
+
+        @self.client.qr
+        def on_qr(client, qr_bytes: bytes):
+            logger.info(f"[{self.class_name}] QR Code intercepted")
+            self._qr_showed = True
+            self.client.event._Event__onqr(client, qr_bytes)
+
+        self.client.event(ConnectedEv)(self.on_connected)
+        self.client.event(DisconnectedEv)(self.on_disconnect)
+        logger.info("Initialized WhatsAppClient")
+
+    def _update_connection_flags(self, connected: bool, is_connecting: bool):
+        self._connected = connected
+        self._is_connecting = is_connecting
+
+    def _do_connect(self):
+        try:
+            logger.info(f"[{self.class_name}] Connecting...", True)
+            self.client.connect()
+        except Exception as e:
+            logger.error(f"[{self.class_name}] Failed to connect: {e}", True)
+        finally:
+            with self._lock:
+                self._update_connection_flags(False, False)
+
+    @property
+    def connected(self) -> bool:
+        with self._lock:
+            return self._connected
+
+    @property
+    def qr_showed(self) -> bool:
+        with self._lock:
+            return self._qr_showed
+
+    def _auto_connect(self, timeout: int, retry_count: int) -> bool:
+        logger.info(f"[{self.class_name}] Auto-connecting...", True)
+        self.connect()
+
+        # Enforce minimum try count
+        max_tries = max(1, retry_count)
+
+        for try_count in range(1, max_tries + 1):
+            with self._lock:
+                if not self._connected and not self._is_connecting:
+                    self.connect()
+
+            # Poll for connection status until timeout expires
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                if self._connected:
+                    return True  # Exit immediately on successful connection
+                time.sleep(0.5)
+
+            # Attempt timed out
+            if try_count < max_tries:
+                logger.warning(
+                    f"[{self.class_name}] Auto-connect attempt {try_count}/{max_tries} failed. Retrying...",
+                    True
+                )
+
+        # Final check after all attempts are exhausted
+        if not self._connected:
+            logger.warning(f"[{self.class_name}] Auto-connect failed after {max_tries} attempts", True)
+            return False
+        return True
+
+    def connect(self):
+        with self._lock:
+            if self._connected or self._is_connecting:
+                logger.info(f"[{self.class_name}] Already connected or connecting", True)
+                return
+            self._is_connecting = True
+
+        self.whatsapp_thread = threading.Thread(target=self._do_connect, daemon=True)
+        self.whatsapp_thread.start()
+
+    def disconnect(self, timeout: int = 30):
+        with self._lock:
+            if not self._connected and not self._is_connecting:
+                logger.info(f"[{self.class_name}] Already disconnected", True)
+                return
+            logger.info(f"[{self.class_name}] Disconnecting...")
+            self.client.disconnect()
+            self._update_connection_flags(False, False)
+
+        if self.whatsapp_thread and self.whatsapp_thread.is_alive():
+            self.whatsapp_thread.join(timeout=timeout)
+
+    def on_connected(self, cl, event):
+        logger.info(f"[{self.class_name}] Connected", True)
+        with self._lock:
+            self._update_connection_flags(True, False)
+
+    def on_disconnect(self, cl, event):
+        logger.info(f"[{self.class_name}] Disconnected")
+        with self._lock:
+            self._update_connection_flags(False, False)
+
+    def send_message(self, recipient: str, message: str, timeout: int = 30, retry_count: int = 1) -> bool:
+        """
+        Send a WhatsApp message.
+
+        Args:
+            recipient: Phone number (with country code, no Plus(+)
+            message: Text content
+            timeout: For auto-connecting
+            retry_count: For auto-connecting. Set 0 or less for no retry.
+
+        Returns:
+            bool: True if send was attempted, False if client unavailable
+        """
+        # Trt to auto-connect if needed
+        if not self._connected:
+            auto_connect_success = self._auto_connect(timeout, retry_count)
+            if not auto_connect_success:
+                return False
+
+        with self._lock:
+            client_ref = self.client
+
+        try:
+            jid = build_jid(recipient)
+            client_ref.send_message(jid, message)
+            logger.info(f"[{self.class_name}] Message sent to {recipient}", True)
+            return True
+        except Exception as e:
+            logger.error(f"[{self.class_name}] Couldn't sent message to {recipient}: {e}", True)
+            return False
 
 def initialize() -> tuple[str, str, str, int]:
     """Initializes the script"""
@@ -136,17 +280,33 @@ def initialize_alert_method() -> dict:
 
     return alert_methods
 
-def initialize_neonize():
-    if Path.exists(NEONIZE_SESSION_FILE_PATH):
-        client = NewClient(str(NEONIZE_SESSION_FILE_PATH))
-        return client
-    else:
-        logger.info("Neonize Session file doesn't exist. Creating...")
+def initialize_neonize() -> WhatsAppClient:
+    whatsapp_client = WhatsAppClient(NEONIZE_SESSION_FILE_PATH)
+
+    if not NEONIZE_SESSION_FILE_PATH.exists():
+        logger.info("Neonize session file not found. Setting up new connection...", True)
         print("Please scan the QR code to login to you WhatsApp account. Press enter to continue...")
         sys.stdin.readline()
-        client = NewClient(str(NEONIZE_SESSION_FILE_PATH))
-        client.connect()
-        return client
+
+        while not whatsapp_client.connected:
+            whatsapp_client.connect()
+            time.sleep(5)
+            print("Press enter if you're done...")
+            sys.stdin.readline()
+
+            if whatsapp_client.qr_showed:
+                logger.warning("WhatsApp is not connected. Do you want to try again?", True)
+                choice = input("(y/n): ").strip().lower()
+                if choice in ("y", "yes"):
+                    continue
+                else:
+                    break
+            else:
+                logger.error("Unknown error occurred. WhatsApp alert will be disabled", True)
+                whatsapp_client.quit()
+        return whatsapp_client
+
+    return whatsapp_client
 
 def initialize_discord_webhook():
     webhook_url = config_manager.get_value("discord_webhook")
@@ -263,7 +423,6 @@ def trigger_alert(device_name, device_model, location_data, discord_webhook, wha
                         time.sleep(2 * attempt)
 
     if whatsapp_client and whatsapp_recipients:
-        whatsapp_client.connect()
         for recipient in whatsapp_recipients:
             logger.info(f"Sending WhatsApp message to {recipient}...", True)
             try:
@@ -284,7 +443,6 @@ def trigger_alert(device_name, device_model, location_data, discord_webhook, wha
                 logger.info(f"WhatsApp message delivered to {recipient}.", True)
             except Exception as e:
                 logger.error(f"Failed to send WhatsApp message to {recipient}: {e}", True)
-        whatsapp_client.disconnect()
 
 def main():
     # Initialize the whole script

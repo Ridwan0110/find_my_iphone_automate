@@ -261,6 +261,8 @@ def initialize_alert_method() -> dict:
             else:
                 logger.error("Invalid selection. No alert method configured.", True)
             logger.info(f"Selected alert method: {sel}")
+                    logger.warning("Invalid selection. No alert method configured.", True)
+                logger.debug(f"Selected alert method: {choice}")
 
         return alert_methods
 

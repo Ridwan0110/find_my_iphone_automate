@@ -11,6 +11,7 @@
 - [ ] Improve device matching: Use UDID or strict string equality instead of substring matching.
 - [x] Optimize WhatsApp connection: Implement persistent connection instead of connecting/disconnecting per alert. (Scraped as it may ban accounts in long time)
 - [ ] Improve configuration: Store WhatsApp recipients as a native YAML list instead of a JSON string.
+- [ ] Implement support for reading configuration from `.env` files and environment variables for non-interactive Docker execution.
 
 ## Others
 - [ ] Use docker to run the script

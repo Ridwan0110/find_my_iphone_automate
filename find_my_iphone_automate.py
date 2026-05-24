@@ -2,6 +2,7 @@
 find_my_iphone_automate: A script to automatically ping you whenever one of your iCloud device is online in Find My.
 """
 # Imports
+import os
 import sys
 import time
 import json
@@ -15,8 +16,11 @@ from pyicloud.exceptions import PyiCloudFailedLoginException, PyiCloudAPIRespons
 from neonize.client import NewClient
 from neonize.events import ConnectedEv, DisconnectedEv
 from neonize.utils import build_jid
+from dotenv import load_dotenv
 
+# Constants
 __version__ = "0.0.3"
+tty = sys.stdin.isatty()
 
 # Initialize PathLIB Paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -26,6 +30,7 @@ DATA_DIR.mkdir(exist_ok=True)
 CONFIG_FILE_PATH = DATA_DIR / "config.yaml"
 BUILD_FILE_PATH = DATA_DIR / "BUILD"
 NEONIZE_SESSION_FILE_PATH = DATA_DIR / "session.db"
+DOTENV_FILE_PATH = BASE_DIR / ".env"
 
 # Ensure `config.yaml` exists and is a YAML mapping so the config manager loads a dict
 if not CONFIG_FILE_PATH.exists() or CONFIG_FILE_PATH.stat().st_size == 0:
@@ -34,6 +39,10 @@ if not CONFIG_FILE_PATH.exists() or CONFIG_FILE_PATH.stat().st_size == 0:
 # Ensure BUILD file exists
 if not BUILD_FILE_PATH.exists():
     BUILD_FILE_PATH.touch()
+
+# Loads .env if exists
+if DOTENV_FILE_PATH.exists():
+    load_dotenv(DOTENV_FILE_PATH)
 
 # Initialize the logger
 logger = redu_logger.RemoteLogger(True, False)
@@ -187,14 +196,37 @@ class WhatsAppClient:
             logger.error(f"[{self.class_name}] Couldn't sent message to {recipient}: {e}", True)
             return False
 
+
+def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> str:
+     """
+     Retrieves a value, prioritizing environment variables, then falling back to
+     interactive input if in a TTY, otherwise raising an error if required.
+     """
+     env_value = os.getenv(env_key)
+
+     if env_value:
+         logger.debug(f"Using environment variable '{env_key}'")
+         return env_value
+     else:
+         if required:
+             if tty:
+                 logger.info(f"Environment variable '{env_key}' not found. Prompting user.")
+                 return input(prompt)
+             else:
+                 logger.error(f"Required environment variable '{env_key}' is missing and not running in interactive mode.")
+                 raise RuntimeError(f"Required environment variable '{env_key}' is missing")
+         else:
+             logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
+             return ""
+
 def initialize() -> tuple[str, str, str, int]:
     """Initializes the script"""
     initialized = bool(config_manager.get_value("initialized"))
     if not initialized:
         logger.info("Script not initialized. Initializing...")
-        apple_id = input("Your Apple ID: ")
-        password = input("Your Apple ID Password: ")
-        target_device_model = input("Target Device Model: ")
+        apple_id = take_input("Your Apple ID: ", "APPLE_ID", True)
+        password = take_input("Your Apple ID Password: ", "APPLE_ID_PASSWORD", True)
+        target_device_model = take_input("Target Device Model: ", "TARGET_DEVICE_MODEL", True)
 
         config_manager.set_value("apple_id", apple_id)
         config_manager.set_value("password", password)

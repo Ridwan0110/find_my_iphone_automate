@@ -362,13 +362,13 @@ def trigger_alert(device_name, device_model, location_data, discord_webhook, wha
     readable_time = datetime.fromtimestamp(timestamp_ms / 1000).strftime('%Y-%m-%d %I:%M:%S %p')
     maps_url = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
 
-    message = (f"\n{"=" * 60}"
+    message = (f"\n{'=' * 60}"
                f"\nALERT: {device_name}/{device_model} IS ONLINE / POSITION UPDATED"
                f"\nTimestamp: {readable_time}"
                f"\nCoordinates: {latitude}, {longitude}"
                f"\nAccuracy  : Within {round(accuracy, 2)} meters"
                f"\nGoogle Maps Link: {maps_url}"
-               f"\n{"=" * 60}\n")
+               f"\n{'=' * 60}\n")
     logger.info(message, True)
 
     # Check alert methods

@@ -295,7 +295,7 @@ def initialize_icloud(apple_id, password) -> PyiCloudService:
             logger.info("Account requires 2FA for full data, but proceeding with Find My bypass access.", True)
         return api
     except PyiCloudFailedLoginException:
-        logger.error("Authentication failed. Please verify your system keyring credentials.", True)
+        logger.error("Authentication failed. Please verify your account credentials.", True)
         sys.exit(1)
     except Exception as e:
         logger.error(f"Connection initialization failed: {e}", True)

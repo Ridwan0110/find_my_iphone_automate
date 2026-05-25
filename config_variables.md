@@ -16,7 +16,6 @@ These variables are saved in the `config.yaml` file.
 - `discord_webhook`: **Required** if **Discord** is set as alert method
 
 ## Auto Generated Variables
-- `initialized`
 - `poll_interval_seconds`
 
 # Environment Variables:

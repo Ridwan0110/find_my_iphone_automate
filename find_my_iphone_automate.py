@@ -250,9 +250,15 @@ def update_config_with_env():
 
 def initialize() -> tuple[str, str, str, int]:
     """Initializes the script"""
-    initialized = bool(config_manager.get_value("initialized"))
-    if not initialized:
-        logger.info("Script not initialized. Initializing...")
+    apple_id = config_manager.get_value("apple_id")
+    password = config_manager.get_value("password")
+    target_device_model = config_manager.get_value("target_device_model")
+    poll_interval_seconds_str = config_manager.get_value("poll_interval_seconds")
+    poll_interval_seconds_default = 180
+
+    if not all([apple_id, password, target_device_model]):
+        logger.info("Required configuration missing. Gathering initial setup details...")
+
         apple_id = take_input("Your Apple ID: ", "APPLE_ID", True)
         password = take_input("Your Apple ID Password: ", "APPLE_ID_PASSWORD", True)
         target_device_model = take_input("Target Device Model: ", "TARGET_DEVICE_MODEL", True)
@@ -260,22 +266,23 @@ def initialize() -> tuple[str, str, str, int]:
         config_manager.set_value("apple_id", apple_id)
         config_manager.set_value("password", password)
         config_manager.set_value("target_device_model", target_device_model)
-        config_manager.set_value("poll_interval_seconds", 180)
-        config_manager.set_value("initialized", True)
+
+        if not poll_interval_seconds_str:
+            config_manager.set_value("poll_interval_seconds", poll_interval_seconds_default)  # Default value
+            poll_interval_seconds_str = str(poll_interval_seconds_default)
+
         config_manager.save_config()
-
-        return apple_id, password, target_device_model, 180
+        logger.info("Initial setup complete and configuration saved.")
     else:
-        apple_id = config_manager.get_value("apple_id")
-        password = config_manager.get_value("password")
-        target_device_model = config_manager.get_value("target_device_model")
-        try:
-            poll_interval_seconds = int(config_manager.get_value("poll_interval_seconds"))
-        except ValueError:
-            logger.error("Invalid value of 'poll_interval_seconds' in config file. Defaulting to 180", True)
-            poll_interval_seconds = 180
+        logger.info("Configuration loaded from file.")
 
-        return apple_id, password, target_device_model, poll_interval_seconds
+    try:
+        poll_interval_seconds = int(poll_interval_seconds_str) if poll_interval_seconds_str else poll_interval_seconds_default
+    except ValueError:
+        logger.error(f"Invalid value of 'poll_interval_seconds' in config file. Defaulting to {poll_interval_seconds_default}", True)
+        poll_interval_seconds = poll_interval_seconds_default
+
+    return  apple_id, password, target_device_model, poll_interval_seconds
 
 def initialize_icloud(apple_id, password) -> PyiCloudService:
     """Initializes and returns the authenticated iCloud service instance."""

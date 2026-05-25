@@ -198,26 +198,29 @@ class WhatsAppClient:
 
 
 def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> str:
-     """
-     Retrieves a value, prioritizing environment variables, then falling back to
-     interactive input if in a TTY, otherwise raising an error if required.
-     """
-     env_value = os.getenv(env_key)
+    """
+    Retrieves a value, prioritizing environment variables, then falling back to
+    interactive input if in a TTY, otherwise raising an error if required.
+    """
+    env_value = os.getenv(env_key)
 
-     if env_value:
-         logger.debug(f"Using environment variable '{env_key}'")
-         return env_value
-     else:
-         if required:
-             if tty:
-                 logger.info(f"Environment variable '{env_key}' not found. Prompting user.")
-                 return input(prompt)
-             else:
-                 logger.error(f"Required environment variable '{env_key}' is missing and not running in interactive mode.")
-                 raise RuntimeError(f"Required environment variable '{env_key}' is missing")
-         else:
-             logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
-             return ""
+    if env_value:
+        logger.debug(f"Using environment variable '{env_key}'")
+        return env_value
+    else:
+        if required:
+            if tty:
+                logger.info(f"Environment variable '{env_key}' not found. Prompting user.")
+                return input(prompt)
+            else:
+                logger.error(f"Required environment variable '{env_key}' is missing and not running in interactive mode.")
+                raise RuntimeError(f"Required environment variable '{env_key}' is missing")
+        else:
+            logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
+            return ""
+
+def update_config_with_env():
+    pass
 
 def initialize() -> tuple[str, str, str, int]:
     """Initializes the script"""

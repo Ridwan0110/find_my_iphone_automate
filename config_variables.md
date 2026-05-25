@@ -22,7 +22,7 @@ These variables are saved in the `config.yaml` file.
 
 ## Required Environment Variables
 - `APPLE_ID`: The target Apple ID for login
-- `Apple_ID_PASSWORD`: The target Apple ID password for login
+- `APPLE_ID_PASSWORD`: The target Apple ID password for login
 - `TARGET_DEVICE_MODEL`: The target device model
 
 ## Optional Environment Variables

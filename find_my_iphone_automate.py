@@ -572,8 +572,6 @@ def main():
                 device_name = status.get("name", "Unknown Device")
                 device_model = status.get("deviceDisplayName", "Unknown Device Model")
 
-
-                # Check if this matches your test device or stolen iPhone 14 profile
                 if target_device_model.lower() in device_model.lower():
                     location = device.location
                     logger.debug(location)

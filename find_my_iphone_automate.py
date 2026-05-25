@@ -403,6 +403,7 @@ def initialize_neonize() -> WhatsAppClient:
         while not whatsapp_client.connected:
             whatsapp_client.connect()
             time.sleep(5)
+            time.sleep(15)
 
         whatsapp_client.disconnect()
         return whatsapp_client

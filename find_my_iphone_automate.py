@@ -6,15 +6,16 @@ import os
 import sys
 import time
 import json
-import redu_logger, redu_config_manager, redu_build_manager
+import redu_logger, redu_build_manager
 import requests
 import threading
+from redu_config_manager import ConfigManager
 from pathlib import Path
 from datetime import datetime
 from pyicloud import PyiCloudService
 from pyicloud.exceptions import PyiCloudFailedLoginException, PyiCloudAPIResponseException
 from neonize.client import NewClient
-from neonize.events import ConnectedEv, DisconnectedEv
+from neonize.events import ConnectedEv, DisconnectedEv, LoggedOutEv
 from neonize.utils import build_jid
 from dotenv import load_dotenv
 
@@ -48,22 +49,24 @@ if DOTENV_FILE_PATH.exists():
 logger = redu_logger.RemoteLogger(True, False)
 
 # Initialize config manager
-config_manager = redu_config_manager.ConfigManager(CONFIG_FILE_PATH)
+config_manager = ConfigManager(CONFIG_FILE_PATH)
 # Initialize build manager
 enable_build_manager = True  # False on release
 build_manager = redu_build_manager.BuildManager(enable_build=enable_build_manager, build_file=BUILD_FILE_PATH, )
 
 
 class WhatsAppClient:
-    def __init__(self, session_path: Path):
+    def __init__(self, session_path: Path, config_manager: ConfigManager):
         logger.info("Initializing WhatsAppClient...")
         self.session_path = session_path
+        self.config_manager = config_manager
 
         self.class_name = "WhatsAppClient"
         self.client = NewClient(str(session_path))
         self._lock = threading.Lock()
         self._is_connecting = False
         self._connected = False
+        self._is_logged_in = self._retrieve_login_status()
         self._qr_showed = False
         self.whatsapp_thread = None
 
@@ -75,7 +78,19 @@ class WhatsAppClient:
 
         self.client.event(ConnectedEv)(self._on_connected)
         self.client.event(DisconnectedEv)(self._on_disconnect)
+        self.client.event(LoggedOutEv)(self._on_log_out)
         logger.info("Initialized WhatsAppClient")
+
+    def _update_login_status(self, status: bool):
+        self._is_logged_in = status
+        config_manager.set_value("is_neonize_logged_in", str(status), True)
+        logger.info(f"[{self.class_name}] Updated login status: {status}")
+
+    def _retrieve_login_status(self) -> bool:
+        status = str(config_manager.get_value("is_neonize_logged_in")).strip().lower() == "true"
+        logger.info(f"[{self.class_name}] Retrieved login status: {status}")
+
+        return status
 
     def _update_connection_flags(self, connected: bool, is_connecting: bool):
         self._connected = connected
@@ -95,11 +110,17 @@ class WhatsAppClient:
         logger.info(f"[{self.class_name}] Connected", True)
         with self._lock:
             self._update_connection_flags(True, False)
+            self._update_login_status(True)
 
     def _on_disconnect(self, cl, event):
         logger.info(f"[{self.class_name}] Disconnected")
         with self._lock:
             self._update_connection_flags(False, False)
+
+    def _on_log_out(self, cl, event):
+        logger.warning(f"[{self.class_name}] Logged out")
+        with self._lock:
+            self._update_login_status(False)
 
     def _auto_connect(self, timeout: int, retry_count: int) -> bool:
         logger.info(f"[{self.class_name}] Auto-connecting...", True)
@@ -137,6 +158,11 @@ class WhatsAppClient:
     def connected(self) -> bool:
         with self._lock:
             return self._connected
+
+    @property
+    def is_logged_in(self):
+        with self._lock:
+            return self._is_logged_in
 
     @property
     def qr_showed(self) -> bool:
@@ -367,10 +393,10 @@ def initialize_alert_method() -> dict:
     return alert_methods
 
 def initialize_neonize() -> WhatsAppClient:
-    whatsapp_client = WhatsAppClient(NEONIZE_SESSION_FILE_PATH)
+    whatsapp_client = WhatsAppClient(NEONIZE_SESSION_FILE_PATH, config_manager)
 
-    if not NEONIZE_SESSION_FILE_PATH.exists():
-        logger.info("Neonize session file not found. Setting up new connection...", True)
+    if not NEONIZE_SESSION_FILE_PATH.exists() or not whatsapp_client.is_logged_in:
+        logger.info("WhatsApp is not logged in. Setting up new connection...", True)
         print("Please scan the QR code to login to you WhatsApp account. Press enter to continue...")
         sys.stdin.readline()
 

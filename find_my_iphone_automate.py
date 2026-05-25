@@ -56,7 +56,18 @@ build_manager = redu_build_manager.BuildManager(enable_build=enable_build_manage
 
 
 class WhatsAppClient:
+    """
+    A wrapper around the Neonize WhatsApp client to manage connection state, event handling, and message sending with thread safety and auto-reconnect capabilities.
+    Core capability is to stay connected with WhatsApp servers via threading while interacting with the client.
+    """
     def __init__(self, session_path: Path, config_manager: ConfigManager):
+        """
+        Initializes the WhatsApp client, setting up event handlers and internal state.
+
+        Args:
+            session_path: Path to the WhatsApp session file for storing authentication data
+            config_manager: An instance of ConfigManager for managing configuration values
+        """
         logger.info("Initializing WhatsAppClient...")
         self.session_path = session_path
         self.config_manager = config_manager
@@ -82,21 +93,43 @@ class WhatsAppClient:
         logger.info("Initialized WhatsAppClient")
 
     def _update_login_status(self, status: bool):
+        """
+        Updates the login status both in memory and in the config file.
+
+        Args:
+            status: The new login status to set
+        """
         self._is_logged_in = status
         config_manager.set_value("is_neonize_logged_in", str(status), True)
         logger.info(f"[{self.class_name}] Updated login status: {status}")
 
     def _retrieve_login_status(self) -> bool:
+        """
+        Retrieves the login status from the config file.
+
+        Returns:
+            The login status as a boolean
+        """
         status = str(config_manager.get_value("is_neonize_logged_in")).strip().lower() == "true"
         logger.info(f"[{self.class_name}] Retrieved login status: {status}")
 
         return status
 
     def _update_connection_flags(self, connected: bool, is_connecting: bool):
+        """
+        Updates the connection state flags. It is highly recommended to call it with thread lock acquired to ensure thread safety.
+
+        Args:
+            connected: Whether the client is currently connected
+            is_connecting: Whether a connection attempt is currently in progress
+        """
         self._connected = connected
         self._is_connecting = is_connecting
 
     def _do_connect(self):
+        """
+        Handles the actual connection logic in a separate thread, including error handling and state updates.
+        """
         try:
             logger.info(f"[{self.class_name}] Connecting...", True)
             self.client.connect()
@@ -107,22 +140,53 @@ class WhatsAppClient:
                 self._update_connection_flags(False, False)
 
     def _on_connected(self, cl, event):
+        """
+        Event handler for when the WhatsApp client successfully connects to the server. Updates connection and login status accordingly.
+
+        Args:
+            cl: The client instance that triggered the event
+            event: The event object containing details about the connection event
+        """
         logger.info(f"[{self.class_name}] Connected", True)
         with self._lock:
             self._update_connection_flags(True, False)
             self._update_login_status(True)
 
     def _on_disconnect(self, cl, event):
+        """
+        Event handler for when the WhatsApp client disconnects from the server. Updates connection and login status accordingly.
+
+        Args:
+            cl: The client instance that triggered the event
+            event: The event object containing details about the connection event
+        """
         logger.info(f"[{self.class_name}] Disconnected")
         with self._lock:
             self._update_connection_flags(False, False)
 
     def _on_log_out(self, cl, event):
+        """
+        Event handler for when the WhatsApp client logs out of the server. Updates connection and login status accordingly.
+
+        Args:
+            cl: The client instance that triggered the event
+            event: The event object containing details about the connection event
+        """
         logger.warning(f"[{self.class_name}] Logged out")
         with self._lock:
             self._update_login_status(False)
 
     def _auto_connect(self, timeout: int, retry_count: int) -> bool:
+        """
+        Attempts to auto-connect the WhatsApp client with retries and timeout.
+
+        Args:
+            timeout: The maximum time to wait for a connection attempt to succeed before retrying
+            retry_count: The number of times to retry the connection attempt if it fails
+
+        Returns:
+            True if the client successfully connected, False otherwise
+        """
         logger.info(f"[{self.class_name}] Auto-connecting...", True)
         self.connect()
 
@@ -156,20 +220,41 @@ class WhatsAppClient:
 
     @property
     def connected(self) -> bool:
+        """
+        Returns whether the WhatsApp client is currently connected to the server.
+
+        Returns:
+            True if connected, False otherwise
+        """
         with self._lock:
             return self._connected
 
     @property
     def is_logged_in(self):
+        """
+        Returns whether the WhatsApp client is currently logged in. This is a separate state from just being connected, as the client may be connected but not authenticated.
+
+        Returns:
+            True if logged in, False otherwise
+        """
         with self._lock:
             return self._is_logged_in
 
     @property
     def qr_showed(self) -> bool:
+        """
+        Returns whether the QR code has been shown during this session. This can be used to determine if the user has been prompted to scan the QR code for authentication.
+
+        Returns:
+            True if the QR code has been shown, False otherwise
+        """
         with self._lock:
             return self._qr_showed
 
     def connect(self):
+        """
+        Initiates the connection process to the WhatsApp servers in a separate thread. If already connected or in the process of connecting, it will log that information and return immediately.
+        """
         with self._lock:
             if self._connected or self._is_connecting:
                 logger.info(f"[{self.class_name}] Already connected or connecting", True)
@@ -180,6 +265,12 @@ class WhatsAppClient:
         self.whatsapp_thread.start()
 
     def disconnect(self, timeout: int = 30):
+        """
+        Disconnects from the WhatsApp servers and waits for the connection thread to finish.
+
+        Args:
+            timeout: The maximum time to wait for the connection thread to finish after initiating disconnect
+        """
         with self._lock:
             if not self._connected and not self._is_connecting:
                 logger.info(f"[{self.class_name}] Already disconnected", True)
@@ -202,7 +293,7 @@ class WhatsAppClient:
             retry_count: For auto-connecting. Set 0 or less for no retry.
 
         Returns:
-            bool: True if send was attempted, False if client unavailable
+            True if send was attempted, False if client unavailable
         """
         # Trt to auto-connect if needed
         if not self._connected:
@@ -227,6 +318,17 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> s
     """
     Retrieves a value, prioritizing environment variables, then falling back to
     interactive input if in a TTY, otherwise raising an error if required.
+
+    Args:
+        prompt: The text to display when asking for user input (only used if TTY and env var not set)
+        env_key: The name of the environment variable to check for the value
+        required: Whether this value is required (if True and not found in env, will prompt user if TTY, otherwise raise an error)
+
+    Raises:
+        RuntimeError: If the value is required but not found in environment variables and not running in interactive mode.
+
+    Returns:
+        The retrieved value or an empty string if not found and not required.
     """
     env_value = os.getenv(env_key)
 
@@ -246,6 +348,9 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> s
             return ""
 
 def update_config_with_env():
+    """
+    Updates the configuration values from environment variables if they are set, and saves the config if any changes were made.
+    """
     config_env_map = {
         "apple_id": "APPLE_ID",
         "password": "APPLE_ID_PASSWORD",
@@ -275,7 +380,14 @@ def update_config_with_env():
         logger.info("No configuration changes from environment variables needed.")
 
 def initialize() -> tuple[str, str, str, int]:
-    """Initializes the script"""
+    """
+    Initializes the script.
+
+    Non-tty friendly
+
+    Returns:
+        A tuple containing (apple_id, password, target_device_model, poll_interval_seconds)
+    """
     apple_id = config_manager.get_value("apple_id")
     password = config_manager.get_value("password")
     target_device_model = config_manager.get_value("target_device_model")
@@ -311,7 +423,16 @@ def initialize() -> tuple[str, str, str, int]:
     return  apple_id, password, target_device_model, poll_interval_seconds
 
 def initialize_icloud(apple_id, password) -> PyiCloudService:
-    """Initializes and returns the authenticated iCloud service instance."""
+    """
+    Initializes and returns the authenticated iCloud service instance.
+
+    Args:
+        apple_id: The Apple ID email address
+        password: The Apple ID password
+
+    Returns:
+        An authenticated PyiCloudService instance
+    """
     logger.info(f"Connecting to iCloud Find My service...", True)
     try:
         api = PyiCloudService(apple_id, password)
@@ -328,6 +449,14 @@ def initialize_icloud(apple_id, password) -> PyiCloudService:
         sys.exit(1)
 
 def initialize_alert_method() -> dict:
+    """
+    Initializes the alert method(s) based on configuration or user input.
+
+    Non-tty friendly
+
+    Returns:
+        A dictionary indicating which alert methods are enabled.
+    """
     alert_methods = {"Discord Webhook": False, "WhatsApp": False}
     current_method = config_manager.get_value("current_alert_method")
 
@@ -393,6 +522,14 @@ def initialize_alert_method() -> dict:
     return alert_methods
 
 def initialize_neonize() -> WhatsAppClient:
+    """
+    Initializes the Neonize WhatsApp client, prompting for QR code scan if not already authenticated.
+
+    Non-tty friendly
+
+    Returns:
+         WhatsAppClient instance
+    """
     whatsapp_client = WhatsAppClient(NEONIZE_SESSION_FILE_PATH, config_manager)
 
     if not NEONIZE_SESSION_FILE_PATH.exists() or not whatsapp_client.is_logged_in:
@@ -409,19 +546,34 @@ def initialize_neonize() -> WhatsAppClient:
 
     return whatsapp_client
 
-def initialize_discord_webhook():
+def initialize_discord_webhook() -> str:
+    """
+    Retrieves the Discord webhook URL from config or prompts the user to add it if not found.
+
+    Non-tty friendly
+
+    Returns:
+        The Discord webhook URL
+    """
     webhook_url = config_manager.get_value("discord_webhook")
     if webhook_url:
         return webhook_url
     else:
         logger.info("Discord Webhook URL doesn't exist. Prompting user...")
-        webhook_url = input("Please enter your discord webhook: ")
+        webhook_url = take_input("Please enter your discord webhook: ", "DISCORD_WEBHOOK")
         config_manager.set_value("discord_webhook", webhook_url, True)
 
         return webhook_url
 
 def initialize_whatsapp_recipients() -> list:
-    """Retrieves WhatsApp recipient numbers from config or prompts user to add them."""
+    """
+    Retrieves WhatsApp recipient numbers from config or prompts user to add them.
+
+    Not non-tty friendly
+
+    Returns:
+        A list of WhatsApp recipient phone numbers (with country code, no Plus(+))
+    """
     stored_recipients = config_manager.get_value("whatsapp_recipients")
 
     # Try to parse existing recipients from config
@@ -465,7 +617,17 @@ def initialize_whatsapp_recipients() -> list:
     return recipients
 
 def trigger_alert(device_name, device_model, location_data, discord_webhook, whatsapp_client, whatsapp_recipients):
-    """Executes notification protocols when a new location coordinate is captured."""
+    """
+    Executes notification protocols when a new location coordinate is captured.
+
+    Args:
+        device_name: (str) The name of the device
+        device_model: (str) The model of the device
+        location_data: (dict) The location data containing latitude, longitude, and other details
+        discord_webhook: (str) The Discord webhook URL
+        whatsapp_client: (WhatsAppClient) The WhatsApp client instance
+        whatsapp_recipients: (list) The list of WhatsApp recipient numbers
+    """
     latitude = location_data.get("latitude")
     longitude = location_data.get("longitude")
     accuracy = location_data.get("horizontalAccuracy")  # Radius of accuracy in meters
@@ -542,6 +704,9 @@ def trigger_alert(device_name, device_model, location_data, discord_webhook, wha
                 logger.error(f"Failed to send WhatsApp message to {recipient}: {e}", True)
 
 def main():
+    """
+    Entry point of the script
+    """
     # Initialize the whole script
     apple_id, password, target_device_model, poll_interval_seconds = initialize()
     alert_methods = initialize_alert_method()

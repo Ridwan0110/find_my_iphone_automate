@@ -16,4 +16,4 @@
 - [x] ~~Implement support for reading configuration from `.env` files and environment variables for non-interactive Docker execution.~~
 
 ## Others
-- [ ] Use docker to run the script
+- [x] ~~Use docker to run the script~~

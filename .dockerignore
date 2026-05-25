@@ -1,0 +1,40 @@
+# Python bytecode
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments (Crucial to ignore!)
+pyvenv/
+venv/
+.venv/
+env/
+
+# Logs and local data
+logs/
+*.log
+session.db-wal
+session.db-shm
+
+# Git
+.git/
+.gitignore
+
+# IDE folders
+.vscode/
+.idea/
+
+# Dockerfile and docker-compose files
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+
+# Environment Files
+.env
+.env.example
+
+# Redu-Dev
+data/
+!data/BUILD
+*.md
+LICENSE
+run_tmux.sh

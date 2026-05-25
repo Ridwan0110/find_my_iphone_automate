@@ -306,34 +306,50 @@ def initialize_alert_method() -> dict:
     current_method = config_manager.get_value("current_alert_method")
 
     if not current_method:
-        logger.info("No alert method configured yet. Ask the user if they'd like to add one now")
-        try:
-            choice = input("No alert method configured. Would you like to add one now? (y/N): ").strip().lower()
-        except Exception as e:
-            logger.error(f"Unexpected Error: {e}. No alert methods configured")
-            return alert_methods
+        if tty:
+            logger.info("No alert method configured yet. Ask the user if they'd like to add one now")
+            try:
+                answer = input("No alert method configured. Would you like to add one now? (y/N): ").strip().lower()
+            except Exception as e:
+                logger.error(f"Unexpected Error: {e}. No alert methods configured")
+                return alert_methods
 
-        if choice in ("y", "yes"):
-            print("Choose alert method:\n1) Discord Webhook\n2) WhatsApp\n3) Both")
-            sel = input("Enter choice [1-3]: ").strip()
-            if sel == "1":
+            if answer in ("y", "yes"):
+                print("Choose alert method:\n1) Discord Webhook\n2) WhatsApp\n3) Both")
+                choice = input("Enter choice [1-3]: ").strip()
+                if choice == "1":
+                    config_manager.set_value("current_alert_method", "Discord Webhook", True)
+                    alert_methods["Discord Webhook"] = True
+                elif choice == "2":
+                    config_manager.set_value("current_alert_method", "WhatsApp", True)
+                    alert_methods["WhatsApp"] = True
+                elif choice == "3":
+                    config_manager.set_value("current_alert_method", "both", True)
+                    for k in alert_methods:
+                        alert_methods[k] = True
+                else:
+                    logger.warning("Invalid selection. No alert method configured.", True)
+                logger.debug(f"Selected alert method: {choice}")
+        else:
+            choice = take_input("", "ALERT_METHOD", False).strip().lower()
+
+            if choice == "discord webhook":
                 config_manager.set_value("current_alert_method", "Discord Webhook", True)
                 alert_methods["Discord Webhook"] = True
-            elif sel == "2":
+            elif choice == "whatsapp":
                 config_manager.set_value("current_alert_method", "WhatsApp", True)
                 alert_methods["WhatsApp"] = True
-            elif sel == "3":
+            elif choice == "both":
                 config_manager.set_value("current_alert_method", "both", True)
                 for k in alert_methods:
                     alert_methods[k] = True
             else:
-                logger.error("Invalid selection. No alert method configured.", True)
-            logger.info(f"Selected alert method: {sel}")
-                    logger.warning("Invalid selection. No alert method configured.", True)
-                logger.debug(f"Selected alert method: {choice}")
+                logger.warning(f"Invalid alert method '{choice}'. No alert method configured.", True)
+            logger.debug(f"Configured alert methods: {alert_methods}")
 
         return alert_methods
 
+    # TTY branch
     # Normalize for comparison
     cm = str(current_method).strip().lower()
 

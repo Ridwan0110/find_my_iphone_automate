@@ -220,7 +220,33 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> s
             return ""
 
 def update_config_with_env():
-    pass
+    config_env_map = {
+        "apple_id": "APPLE_ID",
+        "password": "APPLE_ID_PASSWORD",
+        "target_device_model": "TARGET_DEVICE_MODEL",
+        "current_alert_method": "ALERT_METHOD",
+        "whatsapp_recipients": "WHATSAPP_RECIPIENTS",
+        "discord_webhook": "DISCORD_WEBHOOK",
+        "poll_interval_seconds": "POLL_INTERVAL_SECONDS"
+    }
+    config_updated = False
+
+    for config_key, env_key in config_env_map.items():
+        env_value = os.getenv(env_key)
+        if env_value:
+            current_config_value = config_manager.get_value(config_key)
+            if str(current_config_value) != str(env_value):
+                config_manager.set_value(config_key, env_value)
+                config_updated = True
+                logger.info(f"Updated config key '{config_key}' from environment variable '{env_key}'")
+        else:
+            logger.debug(f"Environment variable '{env_key}' not found, skipping config update for '{config_key}'")
+
+    if config_updated:
+        config_manager.save_config()
+        logger.info("Configuration updated from environment variables and saved.")
+    else:
+        logger.info("No configuration changes from environment variables needed.")
 
 def initialize() -> tuple[str, str, str, int]:
     """Initializes the script"""
@@ -528,4 +554,5 @@ def main():
 
 if __name__ == "__main__":
     build_manager.generate_build_version()
+    update_config_with_env()
     main()

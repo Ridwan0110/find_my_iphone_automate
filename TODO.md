@@ -14,6 +14,8 @@
 - [x] ~~Optimize WhatsApp connection: Implement persistent connection instead of connecting/disconnecting per alert.~~ (Scraped as it may ban accounts in long time)
 - [ ] Improve configuration: Store WhatsApp recipients as a native YAML list instead of a JSON string.
 - [x] ~~Implement support for reading configuration from `.env` files and environment variables for non-interactive Docker execution.~~
+- [x] ~~Add battery in alerts.~~
+- [ ] Ignore alerts if location data is 30 minutes old.
 
 ## Others
 - [x] ~~Use docker to run the script~~

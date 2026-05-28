@@ -620,13 +620,14 @@ def initialize_whatsapp_recipients() -> list:
 
     return recipients
 
-def trigger_alert(device_name, device_model, location_data, discord_webhook, whatsapp_client, whatsapp_recipients):
+def trigger_alert(device_name, device_model, device_battery, location_data, discord_webhook, whatsapp_client, whatsapp_recipients):
     """
     Executes notification protocols when a new location coordinate is captured.
 
     Args:
         device_name: (str) The name of the device
         device_model: (str) The model of the device
+        device_battery: (int | str) Battery of the device. Default is 'Unknown'
         location_data: (dict) The location data containing latitude, longitude, and other details
         discord_webhook: (str) The Discord webhook URL
         whatsapp_client: (WhatsAppClient) The WhatsApp client instance
@@ -643,6 +644,7 @@ def trigger_alert(device_name, device_model, location_data, discord_webhook, wha
     message = (f"\n{'=' * 60}"
                f"\nALERT: {device_name}/{device_model} IS ONLINE / POSITION UPDATED"
                f"\nTimestamp: {readable_time}"
+               f"\nBattery: {device_battery}%"
                f"\nCoordinates: {latitude}, {longitude}"
                f"\nAccuracy  : Within {round(accuracy, 2)} meters"
                f"\nGoogle Maps Link: {maps_url}"
@@ -740,10 +742,20 @@ def main():
                 status = device.status()
                 device_name = status.get("name", "Unknown Device")
                 device_model = status.get("deviceDisplayName", "Unknown Device Model")
+                device_battery = status.get("batteryLevel", "Unknown")
 
+                # Normalize device_battery
+                try:
+                    logger.debug(f"Raw battery: {device_battery}")
+                    device_battery = round(device_battery * 100)
+                except TypeError:
+                    logger.warning(f"Invalid device battery: {device_battery}. Defaulting to 'Unknown.'")
+                    device_battery = "Unknown"
+
+                # Only advance if device model matches
                 if target_device_model.lower() in device_model.lower():
                     location = device.location
-                    logger.debug(location)
+                    logger.debug(f"Raw location: {location}")
 
                     if location:
                         current_timestamp = location.get("timeStamp")
@@ -751,7 +763,7 @@ def main():
                         # Only trigger alerts if it's a completely new location update
                         if current_timestamp != last_known_timestamp:
                             last_known_timestamp = current_timestamp
-                            trigger_alert(device_name, device_model, location, discord_webhook, whatsapp_client, whatsapp_recipients)
+                            trigger_alert(device_name, device_model, device_battery, location, discord_webhook, whatsapp_client, whatsapp_recipients)
                         else:
                             logger.info(f"Checked: {device_model} location is unchanged.", True)
                     else:

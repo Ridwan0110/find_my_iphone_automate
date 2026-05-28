@@ -11,7 +11,7 @@ import requests
 import threading
 from redu_config_manager import ConfigManager
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from pyicloud import PyiCloudService
 from pyicloud.exceptions import PyiCloudFailedLoginException, PyiCloudAPIResponseException
 from neonize.client import NewClient
@@ -620,7 +620,14 @@ def initialize_whatsapp_recipients() -> list:
 
     return recipients
 
-def trigger_alert(device_name, device_model, device_battery, location_data, discord_webhook, whatsapp_client, whatsapp_recipients):
+def trigger_alert(device_name,
+                  device_model,
+                  device_battery,
+                  location_data,
+                  discord_webhook,
+                  whatsapp_client,
+                  whatsapp_recipients,
+                  disable_alert_once=False):
     """
     Executes notification protocols when a new location coordinate is captured.
 
@@ -632,6 +639,7 @@ def trigger_alert(device_name, device_model, device_battery, location_data, disc
         discord_webhook: (str) The Discord webhook URL
         whatsapp_client: (WhatsAppClient) The WhatsApp client instance
         whatsapp_recipients: (list) The list of WhatsApp recipient numbers
+        disable_alert_once: (bool) Don't alert using any of the alert methods. Only log locally.
     """
     latitude = location_data.get("latitude")
     longitude = location_data.get("longitude")
@@ -650,6 +658,9 @@ def trigger_alert(device_name, device_model, device_battery, location_data, disc
                f"\nGoogle Maps Link: {maps_url}"
                f"\n{'=' * 60}\n")
     logger.info(message, True)
+
+    if disable_alert_once:
+        return
 
     # Check alert methods
     if discord_webhook:
@@ -758,12 +769,20 @@ def main():
                     logger.debug(f"Raw location: {location}")
 
                     if location:
-                        current_timestamp = location.get("timeStamp")
+                        timestamp_ms = location.get("timeStamp")
+                        current_time = datetime.now()
+                        timestamp = datetime.fromtimestamp(timestamp_ms / 1000)
 
-                        # Only trigger alerts if it's a completely new location update
-                        if current_timestamp != last_known_timestamp:
-                            last_known_timestamp = current_timestamp
-                            trigger_alert(device_name, device_model, device_battery, location, discord_webhook, whatsapp_client, whatsapp_recipients)
+                        # Only trigger alerts if it's a completely new location update and atleast 30 minutes recent
+                        if timestamp_ms != last_known_timestamp:
+                            if current_time-timestamp < timedelta(minutes=30):
+                                last_known_timestamp = timestamp_ms
+                                trigger_alert(device_name, device_model, device_battery, location, discord_webhook,
+                                              whatsapp_client, whatsapp_recipients)
+                            else:
+                                logger.info("Location changed but data is 30 minutes older. Logging location locally.", True)
+                                trigger_alert(device_name, device_model, device_battery, location, discord_webhook,
+                                              whatsapp_client, whatsapp_recipients, True)
                         else:
                             logger.info(f"Checked: {device_model} location is unchanged.", True)
                     else:

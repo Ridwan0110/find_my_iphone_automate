@@ -20,7 +20,7 @@ from neonize.utils import build_jid
 from dotenv import load_dotenv
 
 # Constants
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 tty = sys.stdin.isatty()
 
 # Initialize PathLIB Paths

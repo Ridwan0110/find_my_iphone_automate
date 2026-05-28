@@ -344,8 +344,12 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> s
                 logger.error(f"Required environment variable '{env_key}' is missing and not running in interactive mode.")
                 raise RuntimeError(f"Required environment variable '{env_key}' is missing")
         else:
-            logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
-            return ""
+            if tty:
+                logger.info(f"Environment variable '{env_key}' not found. Prompting user.")
+                return input(prompt)
+            else:
+                logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
+                return ""
 
 def update_config_with_env():
     """

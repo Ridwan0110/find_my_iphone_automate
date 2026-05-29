@@ -351,7 +351,10 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False, pass
         else:
             if tty:
                 logger.info(f"Environment variable '{env_key}' not found. Prompting user.")
-                return input(prompt)
+                if password:
+                    return getpass(prompt)
+                else:
+                    return input(prompt)
             else:
                 logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
                 return ""

@@ -6,11 +6,11 @@
 - [x] ~~Add `data/` and `.env` to `.gitignore`.~~
 - [x] ~~Review the destination and security of the `RemoteLogger`.~~ (Scraped)
 - [x] ~~Scrub git history of all previous secrets.~~ (Completed via repository re-init)
-- [ ] Add `keyring` library to store credentials
+- [x] Add `keyring` library to store credentials
 - [ ] Encrypt `session.db` to prevent WhatsApp session hijacking
 - [x] Fix type safety issue in `find_my_iphone_automate.py`: Validate `timeStamp` exists before division to prevent potential `NoneType` errors.
-- [ ] ~~Hash passwords with salts~~ (Scraped as hashing is one way method)
-- [ ] Encrypt sensitive data. Fallback to plain text.
+- [x] ~~Hash passwords with salts~~ (Scraped as hashing is one way method)
+- [ ] Encrypt sensitive data. Fallback to plain text. (In progress)
 
 ## Improvements
 - [ ] Improve device matching: Use UDID or strict string equality instead of substring matching.

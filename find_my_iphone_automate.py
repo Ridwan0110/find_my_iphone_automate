@@ -18,6 +18,7 @@ from neonize.client import NewClient
 from neonize.events import ConnectedEv, DisconnectedEv, LoggedOutEv
 from neonize.utils import build_jid
 from dotenv import load_dotenv
+from getpass import getpass
 
 # Constants
 __version__ = "0.2.1"
@@ -314,7 +315,7 @@ class WhatsAppClient:
             return False
 
 
-def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> str:
+def take_input(prompt: str = "", env_key: str = "", required: bool = False, password: bool = False) -> str:
     """
     Retrieves a value, prioritizing environment variables, then falling back to
     interactive input if in a TTY, otherwise raising an error if required.
@@ -323,6 +324,7 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> s
         prompt: The text to display when asking for user input (only used if TTY and env var not set)
         env_key: The name of the environment variable to check for the value
         required: Whether this value is required (if True and not found in env, will prompt user if TTY, otherwise raise an error)
+        password: Should treat as password (if True, use 'getpass' to hide the password).
 
     Raises:
         RuntimeError: If the value is required but not found in environment variables and not running in interactive mode.
@@ -339,7 +341,10 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False) -> s
         if required:
             if tty:
                 logger.info(f"Environment variable '{env_key}' not found. Prompting user.")
-                return input(prompt)
+                if password:
+                    return getpass(prompt)
+                else:
+                    return input(prompt)
             else:
                 logger.error(f"Required environment variable '{env_key}' is missing and not running in interactive mode.")
                 raise RuntimeError(f"Required environment variable '{env_key}' is missing")
@@ -402,7 +407,7 @@ def initialize() -> tuple[str, str, str, int]:
         logger.info("Required configuration missing. Gathering initial setup details...")
 
         apple_id = take_input("Your Apple ID: ", "APPLE_ID", True)
-        password = take_input("Your Apple ID Password: ", "APPLE_ID_PASSWORD", True)
+        password = take_input("Your Apple ID Password: ", "APPLE_ID_PASSWORD", True, True)
         target_device_model = take_input("Target Device Model: ", "TARGET_DEVICE_MODEL", True)
 
         config_manager.set_value("apple_id", apple_id)

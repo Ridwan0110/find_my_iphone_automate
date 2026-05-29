@@ -20,7 +20,7 @@ from neonize.utils import build_jid
 from dotenv import load_dotenv
 
 # Constants
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 tty = sys.stdin.isatty()
 
 # Initialize PathLIB Paths
@@ -646,7 +646,12 @@ def trigger_alert(device_name,
     accuracy = location_data.get("horizontalAccuracy")  # Radius of accuracy in meters
     timestamp_ms = location_data.get("timeStamp")
 
-    readable_time = datetime.fromtimestamp(timestamp_ms / 1000).strftime('%Y-%m-%d %I:%M:%S %p')
+    if isinstance(timestamp_ms, (int, float)):  # Validate before division to prevent potential NoneType errors
+        readable_time = datetime.fromtimestamp(timestamp_ms / 1000).strftime('%Y-%m-%d %I:%M:%S %p')
+    else:
+        logger.warning("No timestamp found in location data. Defaulting to ;Unknown;", True)
+        readable_time = "Unknown"
+
     maps_url = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
 
     message = (f"\n{'=' * 60}"
@@ -771,12 +776,17 @@ def main():
                     if location:
                         timestamp_ms = location.get("timeStamp")
                         current_time = datetime.now()
-                        timestamp = datetime.fromtimestamp(timestamp_ms / 1000)
 
-                        # Only trigger alerts if it's a completely new location update and atleast 30 minutes recent
+                        # Determine if the location update is recent enough to alert (default to True if unknown)
+                        is_recent = True
+                        if isinstance(timestamp_ms, (int, float)):
+                            timestamp = datetime.fromtimestamp(timestamp_ms / 1000)
+                            is_recent = (current_time - timestamp) < timedelta(minutes=30)
+
+                        # Only trigger alerts if it's a completely new location update
                         if timestamp_ms != last_known_timestamp:
-                            if current_time-timestamp < timedelta(minutes=30):
-                                last_known_timestamp = timestamp_ms
+                            last_known_timestamp = timestamp_ms
+                            if is_recent:
                                 trigger_alert(device_name, device_model, device_battery, location, discord_webhook,
                                               whatsapp_client, whatsapp_recipients)
                             else:

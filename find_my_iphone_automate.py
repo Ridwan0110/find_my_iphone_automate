@@ -23,7 +23,7 @@ from neonize.events import ConnectedEv, DisconnectedEv, LoggedOutEv
 from neonize.utils import build_jid
 from dotenv import load_dotenv
 from getpass import getpass
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional
 
 # Constants
@@ -322,6 +322,153 @@ class WhatsAppClient:
             return False
 
 
+class SensitiveConfigManager:
+    """
+    Securely manages sensitive configs
+    """
+    def __init__(self, cipher_suite: Optional[Fernet], config_manager: ConfigManager, service_name: str):
+        """
+        Initializes the class
+
+        Args:
+            cipher_suite: A ``Fernet`` instance
+            config_manager: An ``ConfigManager`` instance
+            service_name: (str) String of service name to use in keyring
+        """
+        self.cipher_suite = cipher_suite
+        self.config_manager = config_manager
+        self.service_name = service_name
+
+    def set_value(self, key: str, value: str) -> bool:
+        """
+        Encrypts (if cipher available) and stores value in keyring or fallback to config file.
+
+        Args:
+            key: (str) Key to store as
+            value: (str) Value of the key
+
+        Returns:
+            True if success, False otherwise
+        """
+        final_value = value
+
+        if isinstance(self.cipher_suite, Fernet):
+            encrypted = self._encrypt_value(value)
+            if encrypted is None:
+                logger.error(f"Aborting save for '{key}' to prevent storing sensitive data in plaintext.", True)
+                return False
+            final_value = encrypted
+
+        success = self._keyring_set_credential(key, final_value)
+
+        # Fallback to config file
+        if not success:
+            logger.warning(f"Keyring failed. Saving '{key}' to local configuration fallback.", True)
+            self.config_manager.set_value(key, final_value, True)
+
+        logger.info(f"Successfully saved value for key '{key}'.")
+        return True
+
+    def get_value(self, key: str) -> Optional[str]:
+        """
+        Retrieves and decrypts value from keyring, or fallback to config file.
+
+        Args:
+            key: (str) Key to retrieve
+
+        Returns:
+            If found, value of the key, None otherwise
+        """
+        value = self._keyring_get_credential(key)
+
+        # Fallback to config file
+        if not value:
+            value = self.config_manager.get_value(key)
+
+        # If neither had the config, exit early
+        if not value:
+            logger.warning(f"Key '{key}' not found in both system keyring and config file.", True)
+            return None
+
+        if isinstance(self.cipher_suite, Fernet):
+            return self._decrypt_value(value)
+
+        logger.info(f"Successfully retrieved value for key '{key}'.")
+        return value
+
+    def _encrypt_value(self, value) -> Optional[str]:
+        try:
+            encrypted_bytes = self.cipher_suite.encrypt(value.encode('utf-8'))
+            encrypted_string = encrypted_bytes.decode('utf-8')
+            logger.info(f"Successfully encrypted value.")
+
+            return encrypted_string
+        except TypeError as e:
+            logger.error(f"Failed to encrypt data: {e}", True)
+            return None
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}", True)
+            return None
+
+    def _decrypt_value(self, value) -> Optional[str]:
+        try:
+            decrypted_bytes = self.cipher_suite.decrypt(value.encode('utf-8'))
+            decrypted_string = decrypted_bytes.decode('utf-8')
+            return decrypted_string
+        except InvalidToken as e:
+            logger.error(f"Failed to decrypt value. The value is invalid, tampered with, or expired.", True)
+            return None
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}", True)
+            return None
+
+    def _keyring_set_credential(self, username: str, credential_string: str) -> bool:
+        """
+        Saves a credential to the keyring.
+
+        Args:
+            username: (str) The username for the credentials
+            credential_string: (str) The credential string to store
+
+        Returns:
+            True if success, False otherwise
+        """
+        try:
+            keyring.set_password(self.service_name, username, credential_string)
+            logger.info(f"Successfully saved credentials in keyring for '{username}'.")
+            return True
+        except KeyringError as e:
+            logger.error(f"Failed to save to keyring: {e}", True)
+            return False
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}", True)
+            return False
+
+    def _keyring_get_credential(self, username) -> Optional[str]:
+        """
+        Retrieves a credential from the keyring.
+
+        Args:
+            username: (str) The username for the credentials
+
+        Returns:
+            A string of the decrypted credential if found, None otherwise.
+        """
+        try:
+            credential_string = keyring.get_password(self.service_name, username)
+            if not credential_string:
+                logger.warning(f"No credentials found for '{self.service_name}' with username '{username}'")
+                return None
+
+            return credential_string
+        except KeyringError as e:
+            logger.error(f"Failed to retrieve credential from the keyring: {e}", True)
+            return None
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}", True)
+            return None
+
+
 def take_input(prompt: str = "", env_key: str = "", required: bool = False, password: bool = False) -> str:
     """
     Retrieves a value, prioritizing environment variables, then falling back to
@@ -366,15 +513,15 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False, pass
                 logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
                 return ""
 
-def update_config_with_env(cipher: Optional[Fernet] = None):
+def update_config_with_env(sensitive_config_manager: SensitiveConfigManager):
     """
     Updates the configuration values from environment variables if they are set, and saves the config if any changes were made.
     """
-    sensitive_config_variable_map = {
+    sensitive_config_env_map = {
         "apple_id": "APPLE_ID",
         "password": "APPLE_ID_PASSWORD",
         "whatsapp_recipients": "WHATSAPP_RECIPIENTS",
-        "discord_webhook": "DISCORD_WEBHOOK"
+        "discord_webhook": "DISCORD_WEBHOOK",
     }
     config_env_map = {
         "target_device_model": "TARGET_DEVICE_MODEL",
@@ -383,17 +530,7 @@ def update_config_with_env(cipher: Optional[Fernet] = None):
     }
     config_updated = False
 
-    # Handle sensitive variables
-    for config_key, env_key in sensitive_config_variable_map.items():
-        env_value = os.getenv(env_key)
-        if env_value:
-            current_value = get_sensitive_value(config_key, cipher)
-            if str(current_value) != str(env_value):
-                set_sensitive_value(config_key, env_value, cipher)
-                config_updated = True
-                logger.info(f"Updated sensitive config key '{config_key}' from environment variable '{env_key}'")
-
-    # Handle non-sensitive variables
+    # For config_env_map
     for config_key, env_key in config_env_map.items():
         env_value = os.getenv(env_key)
         if env_value:
@@ -405,27 +542,35 @@ def update_config_with_env(cipher: Optional[Fernet] = None):
         else:
             logger.debug(f"Environment variable '{env_key}' not found, skipping config update for '{config_key}'")
 
+    # For sensitive_config_env_map
+    for config_key, env_key in sensitive_config_env_map.items():
+        env_value = os.getenv(env_key)
+        if env_value:
+            current_config_value = sensitive_config_manager.get_value(config_key)
+            if str(current_config_value) != str(env_value):
+                sensitive_config_manager.set_value(config_key, env_value)
+                config_updated = True
+                logger.info(f"Updated config key '{config_key}' from environment variable '{env_key}'")
+        else:
+            logger.debug(f"Environment variable '{env_key}' not found, skipping config update for '{config_key}'")
+
     if config_updated:
         config_manager.save_config()
         logger.info("Configuration updated from environment variables and saved.")
     else:
         logger.info("No configuration changes from environment variables needed.")
 
-def initialize(cipher: Optional[Fernet] = None) -> tuple[str, str, str, int]:
+def initialize() -> tuple[str, str, str, int]:
     """
     Initializes the script.
 
     Non-tty friendly
 
-    Args:
-        cipher: Optional Fernet instance for encryption
-
     Returns:
         A tuple containing (apple_id, password, target_device_model, poll_interval_seconds)
     """
-    # Retrieve from secure storage
-    apple_id = get_sensitive_value("apple_id", cipher)
-    password = get_sensitive_value("password", cipher)
+    apple_id = config_manager.get_value("apple_id")
+    password = config_manager.get_value("password")
     target_device_model = config_manager.get_value("target_device_model")
     poll_interval_seconds_str = config_manager.get_value("poll_interval_seconds")
     poll_interval_seconds_default = 180
@@ -433,17 +578,13 @@ def initialize(cipher: Optional[Fernet] = None) -> tuple[str, str, str, int]:
     if not all([apple_id, password, target_device_model]):
         logger.info("Required configuration missing. Gathering initial setup details...")
 
-        if not apple_id:
-            apple_id = take_input("Your Apple ID: ", "APPLE_ID", True)
-            set_sensitive_value("apple_id", apple_id, cipher)
+        apple_id = take_input("Your Apple ID: ", "APPLE_ID", True)
+        password = take_input("Your Apple ID Password: ", "APPLE_ID_PASSWORD", True, True)
+        target_device_model = take_input("Target Device Model: ", "TARGET_DEVICE_MODEL", True)
 
-        if not password:
-            password = take_input("Your Apple ID Password: ", "APPLE_ID_PASSWORD", True, True)
-            set_sensitive_value("password", password, cipher)
-
-        if not target_device_model:
-            target_device_model = take_input("Target Device Model: ", "TARGET_DEVICE_MODEL", True)
-            config_manager.set_value("target_device_model", target_device_model)
+        config_manager.set_value("apple_id", apple_id)
+        config_manager.set_value("password", password)
+        config_manager.set_value("target_device_model", target_device_model)
 
         if not poll_interval_seconds_str:
             config_manager.set_value("poll_interval_seconds", poll_interval_seconds_default)  # Default value
@@ -586,48 +727,42 @@ def initialize_neonize() -> WhatsAppClient:
 
     return whatsapp_client
 
-def initialize_discord_webhook(cipher: Optional[Fernet] = None) -> str:
+def initialize_discord_webhook() -> str:
     """
-    Retrieves the Discord webhook URL from secure storage or prompts the user to add it if not found.
+    Retrieves the Discord webhook URL from config or prompts the user to add it if not found.
 
     Non-tty friendly
-
-    Args:
-        cipher: Optional Fernet instance for encryption
 
     Returns:
         The Discord webhook URL
     """
-    webhook_url = get_sensitive_value("discord_webhook", cipher)
+    webhook_url = config_manager.get_value("discord_webhook")
     if webhook_url:
         return webhook_url
     else:
         logger.info("Discord Webhook URL doesn't exist. Prompting user...")
         webhook_url = take_input("Please enter your discord webhook: ", "DISCORD_WEBHOOK")
-        set_sensitive_value("discord_webhook", webhook_url, cipher)
+        config_manager.set_value("discord_webhook", webhook_url, True)
 
         return webhook_url
 
-def initialize_whatsapp_recipients(cipher: Optional[Fernet] = None) -> list:
+def initialize_whatsapp_recipients() -> list:
     """
-    Retrieves WhatsApp recipient numbers from secure storage or prompts user to add them.
+    Retrieves WhatsApp recipient numbers from config or prompts user to add them.
 
     Not non-tty friendly
-
-    Args:
-        cipher: Optional Fernet instance for encryption
 
     Returns:
         A list of WhatsApp recipient phone numbers (with country code, no Plus(+))
     """
-    stored_recipients = get_sensitive_value("whatsapp_recipients", cipher)
+    stored_recipients = config_manager.get_value("whatsapp_recipients")
 
     # Try to parse existing recipients from config
     if stored_recipients:
         try:
             recipients = json.loads(stored_recipients) if isinstance(stored_recipients, str) else stored_recipients
             if isinstance(recipients, list) and len(recipients) > 0:
-                logger.info(f"Found {len(recipients)} WhatsApp recipient(s) in secure storage.")
+                logger.info(f"Found {len(recipients)} WhatsApp recipient(s) in config.")
                 return recipients
         except (json.JSONDecodeError, TypeError):
             logger.warning("Invalid WhatsApp recipients format in config. Prompting user to re-add them...", True)
@@ -654,8 +789,8 @@ def initialize_whatsapp_recipients(cipher: Optional[Fernet] = None) -> list:
 
         # Store recipients in config
         if recipients:
-            set_sensitive_value("whatsapp_recipients", json.dumps(recipients), cipher)
-            logger.info(f"Saved {len(recipients)} WhatsApp recipient(s) to secure storage.")
+            config_manager.set_value("whatsapp_recipients", json.dumps(recipients), True)
+            logger.info(f"Saved {len(recipients)} WhatsApp recipient(s) to config.")
 
     except Exception as e:
         logger.error(f"Error adding WhatsApp recipients: {e}")
@@ -667,14 +802,14 @@ def initialize_aes128_cipher() -> Optional[Fernet]:
     Hashes the `master_password` to exactly 16 bytes, and converts it to a 32-byte URL-safe Base64 key for Fernet.
 
     Returns:
-        Instance of Fernet with `master_password` as the key.
+        Instance of Fernet with ``master_password`` as the key. None if ``master_password`` is not set.
     """
     master_password = take_input("Your master password (used for encryption): ", "MASTER_PASSWORD", False, True)
 
     if not master_password:
         logger.critical("No master password has been set. It is required to encrypt your sensitive data. "
-                        "Without encryption, all your sensitive data can be read by others who has access to the computer. "
-                        "It is strongly advised to set a master password for peace of mind.", True)
+                        "\nWithout encryption, all your sensitive data can be read by others who has access to the computer. "
+                        "\nIt is strongly advised to set a master password for peace of mind.", True)
         return None
 
     # Hash the master_password using MD5 to get an exact 16-byte digest (128 bits)
@@ -791,102 +926,35 @@ def trigger_alert(device_name,
             except Exception as e:
                 logger.error(f"Failed to send WhatsApp message to {recipient}: {e}", True)
 
-def set_sensitive_value(key: str, value: str, cipher: Optional[Fernet]):
-    """
-    Encrypts the value (if cipher provided) and saves it to the keyring (priority) or config file (fallback).
-
-    Args:
-        key: The key/username for the credential
-        value: The plain text value to store
-        cipher: Optional Fernet instance for encryption
-    """
-    if not value:
-        return
-
-    to_store = value
-    if cipher:
-        try:
-            to_store = cipher.encrypt(value.encode('utf-8')).decode('utf-8')
-        except Exception as e:
-            logger.error(f"Encryption failed for '{key}': {e}")
-            return
-
-    # Priority: Keyring
-    try:
-        keyring.set_password(service_name, key, to_store)
-        logger.info(f"Successfully saved '{key}' to keyring.")
-        return
-    except Exception as e:
-        logger.warning(f"Failed to save '{key}' to keyring: {e}. Falling back to config file.")
-
-    # Fallback: Config File
-    try:
-        config_manager.set_value(key, to_store, True)
-        logger.info(f"Successfully saved '{key}' to config file.")
-    except Exception as e:
-        logger.error(f"Failed to save '{key}' to config file: {e}")
-
-def get_sensitive_value(key: str, cipher: Optional[Fernet]) -> Optional[str]:
-    """
-    Retrieves the sensitive value from keyring (priority) or config file (fallback), decrypting if needed.
-
-    Args:
-        key: The key/username for the credential
-        cipher: Optional Fernet instance for decryption
-
-    Returns:
-        The decrypted plain text value if found, None otherwise.
-    """
-    # Priority: Keyring
-    val = None
-    try:
-        val = keyring.get_password(service_name, key)
-    except Exception as e:
-        logger.error(f"Failed to retrieve '{key}' from keyring: {e}")
-
-    # Fallback: Config File
-    if not val:
-        val = config_manager.get_value(key)
-        if val:
-            logger.debug(f"Retrieved '{key}' from config file.")
-
-    if not val:
-        return None
-
-    if not cipher:
-        return str(val)
-
-    # Decrypt
-    try:
-        return cipher.decrypt(val.encode('utf-8')).decode('utf-8')
-    except Exception as e:
-        # Migration: If decryption fails, it might be plaintext.
-        # We return it as is, and the next 'set' will encrypt it.
-        logger.warning(f"Decryption failed for '{key}'. Assuming plaintext for migration.")
-        return str(val)
-
 def main():
     """
     Entry point of the script
     """
-    # Initialize encryption and keyring
+    # Initialize encryption and sensitive data manager
     cipher_suite = initialize_aes128_cipher()
+    if not cipher_suite:
+        logger.warning("Encryption is disabled.", True)
+        using_encryption = False
+    else:
+        using_encryption = True
+    sensitive_config_manager = SensitiveConfigManager(cipher_suite, config_manager, service_name)
 
-    # Synchronize environment variables securely
-    update_config_with_env(cipher_suite)
+    # Update the configs with environment variables
+    update_config_with_env(sensitive_config_manager)
+    breakpoint()
 
     # Initialize the whole script
-    apple_id, password, target_device_model, poll_interval_seconds = initialize(cipher_suite)
+    apple_id, password, target_device_model, poll_interval_seconds = initialize()
     alert_methods = initialize_alert_method()
     discord_webhook = None
     whatsapp_client = None
     whatsapp_recipients = []
 
     if alert_methods["Discord Webhook"]:
-        discord_webhook = initialize_discord_webhook(cipher_suite)
+        discord_webhook = initialize_discord_webhook()
     if alert_methods["WhatsApp"]:
         whatsapp_client = initialize_neonize()
-        whatsapp_recipients = initialize_whatsapp_recipients(cipher_suite)
+        whatsapp_recipients = initialize_whatsapp_recipients()
 
     icloud_api = initialize_icloud(apple_id, password)
     last_known_timestamp = None

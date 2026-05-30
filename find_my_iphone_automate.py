@@ -970,7 +970,6 @@ def main():
 
     # Update the configs with environment variables
     update_config_with_env(sensitive_config_manager)
-    breakpoint()
 
     # Initialize the whole script
     apple_id, password, target_device_model, poll_interval_seconds = initialize(sensitive_config_manager)

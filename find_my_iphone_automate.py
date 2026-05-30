@@ -30,6 +30,17 @@ from typing import Optional
 __version__ = "0.2.1"
 tty = sys.stdin.isatty()
 service_name = "find_my_iphone_automate"
+sensitive_config_env_map = {
+    "apple_id": "APPLE_ID",
+    "password": "APPLE_ID_PASSWORD",
+    "whatsapp_recipients": "WHATSAPP_RECIPIENTS",
+    "discord_webhook": "DISCORD_WEBHOOK",
+}
+config_env_map = {
+    "target_device_model": "TARGET_DEVICE_MODEL",
+    "current_alert_method": "ALERT_METHOD",
+    "poll_interval_seconds": "POLL_INTERVAL_SECONDS"
+}
 
 # Initialize PathLIB Paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -60,7 +71,7 @@ logger = redu_logger.RemoteLogger(True, False)
 config_manager = ConfigManager(CONFIG_FILE_PATH)
 # Initialize build manager
 enable_build_manager = True  # False on release
-build_manager = redu_build_manager.BuildManager(enable_build=enable_build_manager, build_file=BUILD_FILE_PATH, )
+build_manager = redu_build_manager.BuildManager(enable_build=enable_build_manager, build_file=BUILD_FILE_PATH)
 
 
 class WhatsAppClient:
@@ -68,6 +79,7 @@ class WhatsAppClient:
     A wrapper around the Neonize WhatsApp client to manage connection state, event handling, and message sending with thread safety and auto-reconnect capabilities.
     Core capability is to stay connected with WhatsApp servers via threading while interacting with the client.
     """
+
     def __init__(self, session_path: Path, config_manager: ConfigManager):
         """
         Initializes the WhatsApp client, setting up event handlers and internal state.
@@ -326,6 +338,7 @@ class SensitiveConfigManager:
     """
     Securely manages sensitive configs
     """
+
     def __init__(self, cipher_suite: Optional[Fernet], config_manager: ConfigManager, service_name: str):
         """
         Initializes the class
@@ -500,7 +513,8 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False, pass
                 else:
                     return input(prompt)
             else:
-                logger.error(f"Required environment variable '{env_key}' is missing and not running in interactive mode.")
+                logger.error(
+                    f"Required environment variable '{env_key}' is missing and not running in interactive mode.")
                 raise RuntimeError(f"Required environment variable '{env_key}' is missing")
         else:
             if tty:
@@ -510,24 +524,18 @@ def take_input(prompt: str = "", env_key: str = "", required: bool = False, pass
                 else:
                     return input(prompt)
             else:
-                logger.warning(f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.", True)
+                logger.warning(
+                    f"Optional environment variable '{env_key}' not found and not running in interactive mode. Returning empty string.",
+                    True)
                 return ""
+
 
 def update_config_with_env(sensitive_config_manager: SensitiveConfigManager):
     """
     Updates the configuration values from environment variables if they are set, and saves the config if any changes were made.
+
+    Uses encryption.
     """
-    sensitive_config_env_map = {
-        "apple_id": "APPLE_ID",
-        "password": "APPLE_ID_PASSWORD",
-        "whatsapp_recipients": "WHATSAPP_RECIPIENTS",
-        "discord_webhook": "DISCORD_WEBHOOK",
-    }
-    config_env_map = {
-        "target_device_model": "TARGET_DEVICE_MODEL",
-        "current_alert_method": "ALERT_METHOD",
-        "poll_interval_seconds": "POLL_INTERVAL_SECONDS"
-    }
     config_updated = False
 
     # For config_env_map
@@ -560,17 +568,21 @@ def update_config_with_env(sensitive_config_manager: SensitiveConfigManager):
     else:
         logger.info("No configuration changes from environment variables needed.")
 
-def initialize() -> tuple[str, str, str, int]:
+
+def initialize(sensitive_config_manager: SensitiveConfigManager) -> tuple[str, str, str, int]:
     """
     Initializes the script.
 
-    Non-tty friendly
+    Non-tty friendly. Uses encryption.
+
+    Args:
+        sensitive_config_manager: An instance of ``SensitiveConfigManager``
 
     Returns:
         A tuple containing (apple_id, password, target_device_model, poll_interval_seconds)
     """
-    apple_id = config_manager.get_value("apple_id")
-    password = config_manager.get_value("password")
+    apple_id = sensitive_config_manager.get_value("apple_id")
+    password = sensitive_config_manager.get_value("password")
     target_device_model = config_manager.get_value("target_device_model")
     poll_interval_seconds_str = config_manager.get_value("poll_interval_seconds")
     poll_interval_seconds_default = 180
@@ -582,8 +594,8 @@ def initialize() -> tuple[str, str, str, int]:
         password = take_input("Your Apple ID Password: ", "APPLE_ID_PASSWORD", True, True)
         target_device_model = take_input("Target Device Model: ", "TARGET_DEVICE_MODEL", True)
 
-        config_manager.set_value("apple_id", apple_id)
-        config_manager.set_value("password", password)
+        sensitive_config_manager.set_value("apple_id", apple_id)
+        sensitive_config_manager.set_value("password", password)
         config_manager.set_value("target_device_model", target_device_model)
 
         if not poll_interval_seconds_str:
@@ -596,12 +608,18 @@ def initialize() -> tuple[str, str, str, int]:
         logger.info("Configuration loaded from file.")
 
     try:
-        poll_interval_seconds = int(poll_interval_seconds_str) if poll_interval_seconds_str else poll_interval_seconds_default
+        poll_interval_seconds = int(
+            poll_interval_seconds_str) if poll_interval_seconds_str else poll_interval_seconds_default
     except ValueError:
-        logger.error(f"Invalid value of 'poll_interval_seconds' in config file. Defaulting to {poll_interval_seconds_default}", True)
+        logger.error(
+            f"Invalid value of 'poll_interval_seconds' in config file. Defaulting to {poll_interval_seconds_default}",
+            True)
         poll_interval_seconds = poll_interval_seconds_default
 
-    return  apple_id, password, target_device_model, poll_interval_seconds
+    # Return with correct type
+    return_tuple = str(apple_id), str(password), str(target_device_model), int(poll_interval_seconds)
+    return return_tuple
+
 
 def initialize_icloud(apple_id, password) -> PyiCloudService:
     """
@@ -628,6 +646,7 @@ def initialize_icloud(apple_id, password) -> PyiCloudService:
     except Exception as e:
         logger.error(f"Connection initialization failed: {e}", True)
         sys.exit(1)
+
 
 def initialize_alert_method() -> dict:
     """
@@ -702,6 +721,7 @@ def initialize_alert_method() -> dict:
 
     return alert_methods
 
+
 def initialize_neonize() -> WhatsAppClient:
     """
     Initializes the Neonize WhatsApp client, prompting for QR code scan if not already authenticated.
@@ -727,35 +747,43 @@ def initialize_neonize() -> WhatsAppClient:
 
     return whatsapp_client
 
-def initialize_discord_webhook() -> str:
+
+def initialize_discord_webhook(sensitive_config_manager: SensitiveConfigManager) -> str:
     """
     Retrieves the Discord webhook URL from config or prompts the user to add it if not found.
 
-    Non-tty friendly
+    Non-tty friendly. Uses encryption.
+
+    Args:
+        sensitive_config_manager: An instance of ``SensitiveConfigManager``
 
     Returns:
         The Discord webhook URL
     """
-    webhook_url = config_manager.get_value("discord_webhook")
+    webhook_url = sensitive_config_manager.get_value("discord_webhook")
     if webhook_url:
         return webhook_url
     else:
         logger.info("Discord Webhook URL doesn't exist. Prompting user...")
         webhook_url = take_input("Please enter your discord webhook: ", "DISCORD_WEBHOOK")
-        config_manager.set_value("discord_webhook", webhook_url, True)
+        sensitive_config_manager.set_value("discord_webhook", webhook_url)
 
         return webhook_url
 
-def initialize_whatsapp_recipients() -> list:
+
+def initialize_whatsapp_recipients(sensitive_config_manager: SensitiveConfigManager) -> list:
     """
     Retrieves WhatsApp recipient numbers from config or prompts user to add them.
 
-    Not non-tty friendly
+    Not non-tty friendly. Uses encryption
+
+    Args:
+        sensitive_config_manager: An instance of ``SensitiveConfigManager``
 
     Returns:
         A list of WhatsApp recipient phone numbers (with country code, no Plus(+))
     """
-    stored_recipients = config_manager.get_value("whatsapp_recipients")
+    stored_recipients = sensitive_config_manager.get_value("whatsapp_recipients")
 
     # Try to parse existing recipients from config
     if stored_recipients:
@@ -765,15 +793,16 @@ def initialize_whatsapp_recipients() -> list:
                 logger.info(f"Found {len(recipients)} WhatsApp recipient(s) in config.")
                 return recipients
         except (json.JSONDecodeError, TypeError):
-            logger.warning("Invalid WhatsApp recipients format in config. Prompting user to re-add them...", True)
+            logger.warning("Invalid WhatsApp recipients format in config.", True)
 
-    # No valid recipients found, prompt user to add them
-    logger.info("No WhatsApp recipients configured. Add recipient phone numbers now.")
+    # No valid recipients found, try to add them
+    logger.info("No WhatsApp recipients configured. Add recipient phone numbers now.", True)
     recipients = []
 
     try:
         while True:
-            phone = input("Enter WhatsApp recipient number (country code without +, e.g., 12125551234) or 'done' to finish: ").strip()
+            phone = input(
+                "Enter WhatsApp recipient number (country code without +, e.g., 12125551234) or 'done' to finish: ").strip()
             if phone.lower() == "done":
                 if len(recipients) == 0:
                     logger.warning("No recipients added. WhatsApp alert method will not work", True)
@@ -789,13 +818,14 @@ def initialize_whatsapp_recipients() -> list:
 
         # Store recipients in config
         if recipients:
-            config_manager.set_value("whatsapp_recipients", json.dumps(recipients), True)
+            sensitive_config_manager.set_value("whatsapp_recipients", json.dumps(recipients))
             logger.info(f"Saved {len(recipients)} WhatsApp recipient(s) to config.")
 
     except Exception as e:
         logger.error(f"Error adding WhatsApp recipients: {e}")
 
     return recipients
+
 
 def initialize_aes128_cipher() -> Optional[Fernet]:
     """
@@ -820,6 +850,7 @@ def initialize_aes128_cipher() -> Optional[Fernet]:
     fernet_key = base64.urlsafe_b64encode(aes_128_key + aes_128_key)
 
     return Fernet(fernet_key)
+
 
 def trigger_alert(device_name,
                   device_model,
@@ -926,6 +957,7 @@ def trigger_alert(device_name,
             except Exception as e:
                 logger.error(f"Failed to send WhatsApp message to {recipient}: {e}", True)
 
+
 def main():
     """
     Entry point of the script
@@ -934,9 +966,6 @@ def main():
     cipher_suite = initialize_aes128_cipher()
     if not cipher_suite:
         logger.warning("Encryption is disabled.", True)
-        using_encryption = False
-    else:
-        using_encryption = True
     sensitive_config_manager = SensitiveConfigManager(cipher_suite, config_manager, service_name)
 
     # Update the configs with environment variables
@@ -944,17 +973,17 @@ def main():
     breakpoint()
 
     # Initialize the whole script
-    apple_id, password, target_device_model, poll_interval_seconds = initialize()
+    apple_id, password, target_device_model, poll_interval_seconds = initialize(sensitive_config_manager)
     alert_methods = initialize_alert_method()
     discord_webhook = None
     whatsapp_client = None
     whatsapp_recipients = []
 
     if alert_methods["Discord Webhook"]:
-        discord_webhook = initialize_discord_webhook()
+        discord_webhook = initialize_discord_webhook(sensitive_config_manager)
     if alert_methods["WhatsApp"]:
         whatsapp_client = initialize_neonize()
-        whatsapp_recipients = initialize_whatsapp_recipients()
+        whatsapp_recipients = initialize_whatsapp_recipients(sensitive_config_manager)
 
     icloud_api = initialize_icloud(apple_id, password)
     last_known_timestamp = None
@@ -1004,7 +1033,8 @@ def main():
                                 trigger_alert(device_name, device_model, device_battery, location, discord_webhook,
                                               whatsapp_client, whatsapp_recipients)
                             else:
-                                logger.info("Location changed but data is 30 minutes older. Logging location locally.", True)
+                                logger.info("Location changed but data is 30 minutes older. Logging location locally.",
+                                            True)
                                 trigger_alert(device_name, device_model, device_battery, location, discord_webhook,
                                               whatsapp_client, whatsapp_recipients, True)
                         else:

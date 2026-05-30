@@ -10,7 +10,8 @@
 - [ ] Encrypt `session.db` to prevent WhatsApp session hijacking
 - [x] Fix type safety issue in `find_my_iphone_automate.py`: Validate `timeStamp` exists before division to prevent potential `NoneType` errors.
 - [x] ~~Hash passwords with salts~~ (Scraped as hashing is one way method)
-- [ ] Encrypt sensitive data. Fallback to plain text. (In progress)
+- [x] ~~Encrypt sensitive data. Fallback to plain text.~~
+- [ ] Allow multiple attempts when typing the `master_password`.
 
 ## Improvements
 - [ ] Improve device matching: Use UDID or strict string equality instead of substring matching.

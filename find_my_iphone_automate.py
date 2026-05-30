@@ -27,7 +27,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional
 
 # Constants
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 tty = sys.stdin.isatty()
 service_name = "find_my_iphone_automate"
 sensitive_config_env_map = {

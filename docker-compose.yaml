@@ -2,12 +2,13 @@ services:
   find_my_iphone_automate:
     container_name: find_my_iphone_automate
     image: ghcr.io/ridwan0110/find_my_iphone_automate:latest
-    restart: always
+    restart: unless-stopped
     volumes:
       - find_my_iphone_automate_data:/app/data
     environment:
       - TZ=
       # Normally configured via the .env file
+      - MASTER_PASSWORD
       - APPLE_ID
       - APPLE_ID_PASSWORD
       - TARGET_DEVICE_MODEL

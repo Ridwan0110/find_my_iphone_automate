@@ -12,6 +12,7 @@
 - [x] ~~Hash passwords with salts~~ (Scraped as hashing is one way method)
 - [x] ~~Encrypt sensitive data. Fallback to plain text.~~
 - [ ] Allow multiple attempts when typing the `master_password`.
+- [ ] Remove old plaintext from the config file
 
 ## Improvements
 - [ ] Improve device matching: Use UDID or strict string equality instead of substring matching.

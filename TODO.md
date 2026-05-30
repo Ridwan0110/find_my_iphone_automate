@@ -21,5 +21,9 @@
 - [x] ~~Add battery in alerts.~~
 - [x] ~~Ignore alerts if location data is 30 minutes old.~~
 
+## GUI
+- [ ] Use Qt to implement a GUI for easier configuration and monitor on non-container machines
+
 ## Others
 - [x] ~~Use docker to run the script~~
+- [ ] Use `--headless` option to disable GUI

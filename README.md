@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3-blue?logo=python)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](https://opensource.org/license/mit/)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/Ridwan0110/redu_logger/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/Ridwan0110/redu_logger/releases)
 [![GitHub](https://img.shields.io/badge/source-GitHub-blue?logo=github)](https://github.com/Ridwan0110/find_my_iphone_automate)
 
 

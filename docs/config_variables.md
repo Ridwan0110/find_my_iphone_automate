@@ -4,7 +4,7 @@ This file documents all the variables (including environment) that is used as co
 
 Non-sensitive variables are saved in the `config.yaml` file.
 
-Sensitive variables are saved in the system keyring. Fallback to `config.yaml` in erros
+Sensitive variables are saved in the system keyring. Fallback to `config.yaml` in errors
 
 # Config Variables:
 
